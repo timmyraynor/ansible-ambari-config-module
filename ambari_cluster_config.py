@@ -61,7 +61,7 @@ EXAMPLES = '''
         password: admin
         cluster_name: my_cluster
         config_type: config_type_a
-        tag: version1372818
+        config_tag: version1372818
         ignore_secrets: true
         config_map:
           key x:
@@ -111,7 +111,7 @@ def main():
         password=dict(type='str', default=None, required=True),
         cluster_name=dict(type='str', default=None, required=True),
         config_type=dict(type='str', default=None, required=True),
-        tag=dict(type='str', required=False, required=False),
+        config_tag=dict(type='str', default=None, required=False),
         ignore_secret=dict(default=True, required=False, choices=BOOLEANS),
         config_map=dict(type='dict', default=[], required=True)
     )
@@ -144,7 +144,7 @@ def main():
     password = p.get('password')
     cluster_name = p.get('cluster_name')
     config_type = p.get('config_type')
-    config_tag = p.get('tag')
+    config_tag = p.get('config_tag')
     config_map = p.get('config_map')
 
     ambari_url = 'http://{0}:{1}'.format(host, port)
