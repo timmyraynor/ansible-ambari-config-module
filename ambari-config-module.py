@@ -1,15 +1,13 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 #
-# Author: Mark Bittmann (https://github.com/mbittmann)
 # Documentation section
 DOCUMENTATION = '''
 ---
 module: ambari_cluster_state
 version_added: "1.0"
-author: Mark Bittmann (https://github.com/mbittmann)
-short_description: Create, delete, start or stop an ambari cluster
-  - Create, delete, start or stop an ambari cluster
+short_description: Capture or update Ambari cluster configurations
+  - Capture or update Ambari cluster configurations
 options:
   host:
     description:
