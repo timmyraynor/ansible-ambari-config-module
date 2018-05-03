@@ -112,8 +112,8 @@ def main():
         cluster_name=dict(type='str', default=None, required=True),
         config_type=dict(type='str', default=None, required=True),
         config_tag=dict(type='str', default=None, required=False),
-        ignore_secret=dict(default=True, required=False, choices=BOOLEANS),
-        config_map=dict(type='dict', default=[], required=True)
+        ignore_secret=dict(default=True, required=False, choices=[True, False]),
+        config_map=dict(type='dict', default=None, required=True)
     )
 
     module = AnsibleModule(
@@ -146,6 +146,7 @@ def main():
     config_type = p.get('config_type')
     config_tag = p.get('config_tag')
     config_map = p.get('config_map')
+    ignore_secret = p.get('ignore_secret')
 
     ambari_url = 'http://{0}:{1}'.format(host, port)
 
@@ -161,7 +162,7 @@ def main():
         for key in cluster_config:
             current_value = cluster_config[key]
             if key in config_map:
-                desired_value = config_map[key].value
+                desired_value = config_map[key]['value']
                 if current_value == desired_value:
                     # if value matched, do nothing
                     continue
@@ -173,7 +174,7 @@ def main():
                         else:
                             changed = True
                     (actual_value, updated) = get_config_desired_value(
-                        current_map, key, desired_value, config_map[key].regex)
+                        cluster_config, key, desired_value, config_map[key]['regex'])
                     changed = updated
                     result_map[key] = actual_value
                     
@@ -243,7 +244,7 @@ def get_cluster_config_index(ambari_url, user, password, cluster_name):
 
 def get_cluster_config(ambari_url, user, password, cluster_name, config_type, config_tag):
     r = get(ambari_url, user, password,
-            '/api/v1/clusters/{0}/configurations\?type={1}&tag={2}'.format(cluster_name, config_type, config_tag))
+            '/api/v1/clusters/{0}/configurations?type={1}&tag={2}'.format(cluster_name, config_type, config_tag))
     try:
         assert r.status_code == 200
     except AssertionError as e:
