@@ -53,21 +53,20 @@ EXAMPLES = '''
 
 # example:
 
-  - name: Create a 
+  - name: Update a cluster configuration
     ambari_cluster_config:
         host: localhost
         port: 8080
         username: admin
         password: admin
         cluster_name: my_cluster
-        config_type: config_type_a
-        config_tag: version1372818
-        ignore_secrets: true
+        config_type: admin-properties
+        ignore_secret: true
         config_map:
-          key x:
-            value: value y
-          key x2:
-            value: value y2
+          db_admin_user:
+            value: root
+          key_x2:
+            value: value_y2
             regex: ^your_regex to fully replace
 '''
 from ansible.module_utils.basic import *
