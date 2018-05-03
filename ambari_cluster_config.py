@@ -150,12 +150,15 @@ def main():
     ambari_url = 'http://{0}:{1}'.format(host, port)
 
     try:
+        # Get current effective version/tag if not specified
         if config_tag is None:
             config_index = get_cluster_config_index(
                 ambari_url, username, password, cluster_name)
             config_tag = config_index[config_type]["tag"]
+        # Get config using the effective tag
         cluster_config = get_cluster_config(
             ambari_url, username, password, cluster_name, config_type, config_tag)
+        # Start iterate through the config with input
         changed = False
         result_map = {}
         for key in cluster_config:
@@ -163,26 +166,30 @@ def main():
             if key in config_map:
                 desired_value = config_map[key]['value']
                 if current_value == desired_value:
-                    # if value matched, do nothing
-                    continue
+                    # if value matched, put it directly into the map
+                    result_map[key] = current_value
                 else:
+                    # Mismatched!
+                    # if the change is about secrets, deal with secrets
                     if current_value.startswith('SECRET'):
                         # update state base on ignore secret or not
                         if ignore_secret:
                             changed = False
                         else:
                             changed = True
+                    # Get the require-to-update value base on regex/non-regex
                     (actual_value, updated) = get_config_desired_value(
                         cluster_config, key, desired_value, config_map[key].get('regex'))
+                    # base on the regex sub, if not changed then change the change state to False
                     changed = updated
                     result_map[key] = actual_value
-                    
             else:
                 result_map[key] = current_value
+
         if changed:
             request = update_cluster_config(
                 ambari_url, username, password, cluster_name, config_type, result_map)
-            module.exit_json(changed=True, results=request.content)
+            module.exit_json(changed=True, results=request.content, msg=result_map)
         else:
             module.exit_json(changed=False, msg='No changes in config')
     except requests.ConnectionError as e:
@@ -197,10 +204,13 @@ def main():
 
 def get_config_desired_value(current_map, key, desired_value, regex):
     if regex is None or regex == '':
+        # if not contains regex, straight return the desired_value
         return (desired_value, True)
     else:
+        # if contains regex, us re.sub to replace the regex pattern with desired_value
         result = re.sub(regex, desired_value, current_map[key])
         if result == current_map[key]:
+            # if result not changed, then mark as not changed
             return (result, False)
         else:
             return (result, True)
