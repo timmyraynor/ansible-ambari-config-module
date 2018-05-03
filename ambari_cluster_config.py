@@ -46,8 +46,15 @@ options:
 
 EXAMPLES = '''
 # must use full relative path to any files in stored in roles/role_name/files/
+
+# NOT SUPPORT list:
+  - Don't support any config that is not within Ambari config, so if the config file does not have a particular key
+  you cannot add it.
+
+# example:
+
   - name: Create a 
-    ambari_cluster_state:
+    ambari_cluster_config:
         host: localhost
         port: 8080
         username: admin
@@ -57,10 +64,12 @@ EXAMPLES = '''
         config_tag: version1372818
         ignore_secrets: true
         config_map:
-          - name: key x
+          key x:
             value: value y
+          key x2:
+            value: value y2
+            regex: ^your_regex to fully replace
 '''
-__author__ = 'timqin'
 from ansible.module_utils.basic import *
 import json
 import os
@@ -85,6 +94,13 @@ except ImportError:
 else:
     TIME_FOUND = True
 
+try:
+    import re
+except ImportError:
+    REGEX_FOUND = False
+else:
+    REGEX_FOUND = True
+
 
 def main():
 
@@ -96,8 +112,8 @@ def main():
         cluster_name=dict(type='str', default=None, required=True),
         config_type=dict(type='str', default=None, required=True),
         config_tag=dict(type='str', required=False, required=False),
-        ignore_secret = dict(default=True, required=False, choices=BOOLEANS)
-        config_map=dict(type='list', default=[], required=True)
+        ignore_secret=dict(default=True, required=False, choices=BOOLEANS),
+        config_map=dict(type='dict', default=[], required=True)
     )
 
     module = AnsibleModule(
@@ -116,6 +132,10 @@ def main():
         module.fail_json(
             msg='time library is required for this module')
 
+    if not REGEX_FOUND:
+        module.fail_json(
+            msg='regex(re) library is required for this module')
+
     p = module.params
 
     host = p.get('host')
@@ -131,15 +151,17 @@ def main():
 
     try:
         if config_tag is None:
-            config_index = get_cluster_config_index(ambari_url, username, password, cluster_name)
+            config_index = get_cluster_config_index(
+                ambari_url, username, password, cluster_name)
             config_tag = config_index[config_type]["tag"]
-        cluster_config = get_cluster_config(ambari_url, username, password, cluster_name, config_type, config_tag)
+        cluster_config = get_cluster_config(
+            ambari_url, username, password, cluster_name, config_type, config_tag)
         changed = False
         result_map = {}
         for key in cluster_config:
             current_value = cluster_config[key]
             if key in config_map:
-                desired_value = config_map[key]
+                desired_value = config_map[key].value
                 if current_value == desired_value:
                     # if value matched, do nothing
                     continue
@@ -150,44 +172,53 @@ def main():
                             changed = False
                         else:
                             changed = True
-                    result_map[key] = get_config_desired_value(current_map, key, desired_value, 'str')
+                    (actual_value, updated) = get_config_desired_value(
+                        current_map, key, desired_value, config_map[key].regex)
+                    changed = updated
+                    result_map[key] = actual_value
+                    
             else:
                 result_map[key] = current_value
         if changed:
-            request = update_cluster_config(ambari_url, username, password, cluster_name, config_type, result_map)
+            request = update_cluster_config(
+                ambari_url, username, password, cluster_name, config_type, result_map)
             module.exit_json(changed=True, results=request.content)
         else:
             module.exit_json(changed=False, msg='No changes in config')
     except requests.ConnectionError as e:
-        module.fail_json(msg="Could not connect to Ambari client: " + str(e.message))
+        module.fail_json(
+            msg="Could not connect to Ambari client: " + str(e.message))
     except AssertionError as e:
         module.fail_json(msg=e.message)
     except Exception as e:
-        module.fail_json(msg="Ambari client exception occurred: " + str(e.message))
+        module.fail_json(
+            msg="Ambari client exception occurred: " + str(e.message))
 
 
-def get_config_desired_value(current_map, key, desired_value, mode):
-    if mode == 'str':
-        return desired_value
-    elif mode == 'xml':
-        return desired_value
+def get_config_desired_value(current_map, key, desired_value, regex):
+    if regex is None or regex == '':
+        return (desired_value, True)
     else:
-        return desired_value
-
+        result = re.sub(regex, desired_value, current_map[key])
+        if result == current_map[key]:
+            return (result, False)
+        else:
+            return (result, True)
 
 
 def update_cluster_config(ambari_url, user, password, cluster_name, config_type, updated_map):
     ts = time.time()
     tag_ts = ts * 1000
     payload = {
-        'type': config_type, 
+        'type': config_type,
         'tag': 'version{0}'.format('%d' % tag_ts),
         'properties': updated_map,
         'service_config_version_note': 'Ansible module syncing',
-        }
-    put_body = {'Clusters': {'desired_config':[]}}
+    }
+    put_body = {'Clusters': {'desired_config': []}}
     put_body['Clusters']['desired_config'].append(payload)
-    r = put(ambari_url, user, password, '/api/v1/clusters/{0}',json.dumps(put_body))
+    r = put(ambari_url, user, password,
+            '/api/v1/clusters/{0}', json.dumps(put_body))
     try:
         assert r.status_code == 200 or r.status_code == 201
     except AssertionError as e:
@@ -198,7 +229,8 @@ def update_cluster_config(ambari_url, user, password, cluster_name, config_type,
 
 
 def get_cluster_config_index(ambari_url, user, password, cluster_name):
-    r = get(ambari_url, user, password, '/api/v1/clusters/{0}?fields=Clusters/desired_configs'.format(cluster_name))
+    r = get(ambari_url, user, password,
+            '/api/v1/clusters/{0}?fields=Clusters/desired_configs'.format(cluster_name))
     try:
         assert r.status_code == 200
     except AssertionError as e:
@@ -210,7 +242,8 @@ def get_cluster_config_index(ambari_url, user, password, cluster_name):
 
 
 def get_cluster_config(ambari_url, user, password, cluster_name, config_type, config_tag):
-    r = get(ambari_url, user, password, '/api/v1/clusters/{0}/configurations\?type={1}&tag={2}'.format(cluster_name, config_type, config_tag))
+    r = get(ambari_url, user, password,
+            '/api/v1/clusters/{0}/configurations\?type={1}&tag={2}'.format(cluster_name, config_type, config_tag))
     try:
         assert r.status_code == 200
     except AssertionError as e:
@@ -229,16 +262,16 @@ def get(ambari_url, user, password, path):
 
 def put(ambari_url, user, password, path, data):
     headers = {'X-Requested-By': 'ambari'}
-    r = requests.put(ambari_url + path, data=data, auth=(user, password), headers=headers)
+    r = requests.put(ambari_url + path, data=data,
+                     auth=(user, password), headers=headers)
     return r
 
 
 def post(ambari_url, user, password, path, data):
     headers = {'X-Requested-By': 'ambari'}
-    r = requests.post(ambari_url + path, data=data, auth=(user, password), headers=headers)
+    r = requests.post(ambari_url + path, data=data,
+                      auth=(user, password), headers=headers)
     return r
-
-
 
 
 if __name__ == '__main__':
