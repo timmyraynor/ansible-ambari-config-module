@@ -4,7 +4,7 @@
 # Documentation section
 DOCUMENTATION = '''
 ---
-module: ambari_cluster_state
+module: ambari_cluster_config
 version_added: "1.0"
 short_description: Capture or update Ambari cluster configurations
   - Capture or update Ambari cluster configurations
@@ -30,7 +30,7 @@ options:
     description:
       The configuration type for Ambari cluster configurations
     required: yes
-  config_tag:
+  tag:
     description:
       The tag version for a configuration type in Ambari
     required: no
@@ -61,7 +61,7 @@ EXAMPLES = '''
         password: admin
         cluster_name: my_cluster
         config_type: config_type_a
-        config_tag: version1372818
+        tag: version1372818
         ignore_secrets: true
         config_map:
           key x:
@@ -111,7 +111,7 @@ def main():
         password=dict(type='str', default=None, required=True),
         cluster_name=dict(type='str', default=None, required=True),
         config_type=dict(type='str', default=None, required=True),
-        config_tag=dict(type='str', required=False, required=False),
+        tag=dict(type='str', required=False, required=False),
         ignore_secret=dict(default=True, required=False, choices=BOOLEANS),
         config_map=dict(type='dict', default=[], required=True)
     )
@@ -144,7 +144,7 @@ def main():
     password = p.get('password')
     cluster_name = p.get('cluster_name')
     config_type = p.get('config_type')
-    config_tag = p.get('config_tag')
+    config_tag = p.get('tag')
     config_map = p.get('config_map')
 
     ambari_url = 'http://{0}:{1}'.format(host, port)
