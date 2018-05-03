@@ -140,7 +140,7 @@ def main():
 
     host = p.get('host')
     port = p.get('port')
-    username = p.get('password')
+    username = p.get('username')
     password = p.get('password')
     cluster_name = p.get('cluster_name')
     config_type = p.get('config_type')
