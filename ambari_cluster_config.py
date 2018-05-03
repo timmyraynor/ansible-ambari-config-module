@@ -34,7 +34,7 @@ options:
     description:
       The tag version for a configuration type in Ambari
     required: no
-  ignore_secrets:
+  ignore_secret:
     description:
       Whether to ignore the secrets as the configurations of Ambari secrets is not shown via api calls, Default is True
     required: no
@@ -108,7 +108,7 @@ def main():
         host=dict(type='str', default=None, required=True),
         port=dict(type='int', default=None, required=True),
         username=dict(type='str', default=None, required=True),
-        password=dict(type='str', default=None, required=True),
+        password=dict(type='str', default=None, required=True, no_log=True),
         cluster_name=dict(type='str', default=None, required=True),
         config_type=dict(type='str', default=None, required=True),
         config_tag=dict(type='str', default=None, required=False),
@@ -174,7 +174,7 @@ def main():
                         else:
                             changed = True
                     (actual_value, updated) = get_config_desired_value(
-                        cluster_config, key, desired_value, config_map[key]['regex'])
+                        cluster_config, key, desired_value, config_map[key].get('regex'))
                     changed = updated
                     result_map[key] = actual_value
                     
@@ -219,7 +219,7 @@ def update_cluster_config(ambari_url, user, password, cluster_name, config_type,
     put_body = {'Clusters': {'desired_config': []}}
     put_body['Clusters']['desired_config'].append(payload)
     r = put(ambari_url, user, password,
-            '/api/v1/clusters/{0}', json.dumps(put_body))
+            '/api/v1/clusters/{0}'.format(cluster_name), json.dumps(put_body))
     try:
         assert r.status_code == 200 or r.status_code == 201
     except AssertionError as e:
