@@ -181,7 +181,7 @@ def main():
                     (actual_value, updated) = get_config_desired_value(
                         cluster_config, key, desired_value, config_map[key].get('regex'))
                     # base on the regex sub, if not changed then change the change state to False
-                    changed = updated
+                    changed = changed and updated
                     result_map[key] = actual_value
             else:
                 result_map[key] = current_value
@@ -227,8 +227,10 @@ def update_cluster_config(ambari_url, user, password, cluster_name, config_type,
     }
     put_body = {'Clusters': {'desired_config': []}}
     put_body['Clusters']['desired_config'].append(payload)
+    put_list = []
+    put_list.append(put_body)
     r = put(ambari_url, user, password,
-            '/api/v1/clusters/{0}'.format(cluster_name), json.dumps(put_body))
+            '/api/v1/clusters/{0}'.format(cluster_name), json.dumps(put_list))
     try:
         assert r.status_code == 200 or r.status_code == 201
     except AssertionError as e:
