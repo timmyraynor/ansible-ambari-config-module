@@ -1,0 +1,19 @@
+---
+
+- hosts: localhost
+  tasks:
+    - name: Configure Ambari
+      ambari_cluster_config:
+        host: localhost
+        port: 8080
+        username: admin
+        password: admin
+        cluster_name: test
+        config_type: admin-properties
+        ignore_secret: true
+        config_map:
+          db_root_user:
+            value: root
+          key_x2:
+            value: value_y2
+            regex: ^your_regex to fully replace

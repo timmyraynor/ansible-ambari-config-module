@@ -170,18 +170,13 @@ def main():
                     result_map[key] = current_value
                 else:
                     # Mismatched!
-                    # if the change is about secrets, deal with secrets
-                    if current_value.startswith('SECRET'):
-                        # update state base on ignore secret or not
-                        if ignore_secret:
-                            changed = False
-                        else:
-                            changed = True
                     # Get the require-to-update value base on regex/non-regex
                     (actual_value, updated) = get_config_desired_value(
                         cluster_config, key, desired_value, config_map[key].get('regex'))
                     # base on the regex sub, if not changed then change the change state to False
-                    changed = changed and updated
+                    if ignore_secret and current_value.startswith('SECRET'):
+                        updated = False
+                    changed = changed or updated
                     result_map[key] = actual_value
             else:
                 result_map[key] = current_value
@@ -263,7 +258,13 @@ def get_cluster_config(ambari_url, user, password, cluster_name, config_type, co
                     request message {1}'.format(r.status_code, r.content)
         raise
     config = json.loads(r.content)
-    return config['items'][0]['properties']
+    try:
+        result = config['items'][0]['properties']
+        return result
+    except KeyError as e:
+        e.message = 'Could not find the right properties key, request code {0}, \
+                     possiblly having a wrong tag, response content is: {1}'.format(r.status_code, r.content)
+        raise
 
 
 def get(ambari_url, user, password, path):
