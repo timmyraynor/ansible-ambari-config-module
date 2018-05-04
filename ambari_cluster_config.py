@@ -63,7 +63,7 @@ EXAMPLES = '''
         config_type: admin-properties
         ignore_secret: true
         config_map:
-          db_admin_user:
+          db_root_user:
             value: root
           key_x2:
             value: value_y2
