@@ -160,8 +160,8 @@ def main():
 
 
 def update_cluster_config(config_file_loc, host, user, password, port, cluster_name, config_type, key, value):
-    content_output = subprocess.check_output([config_file_loc, '-u', user, '-p', password,
-                                              '-port', port, 'set', host, cluster_name, config_type, key, value])
+    content_output = subprocess.check_output([config_file_loc, '-u', user, '-p', str(password),
+                                              '-port', str(port), 'set', host, cluster_name, config_type, str(key), str(value)])
     return parse_update_cluster_response(content_output)
 
 
