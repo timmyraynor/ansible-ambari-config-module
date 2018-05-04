@@ -61,13 +61,9 @@ EXAMPLES = '''
         password: admin
         cluster_name: my_cluster
         config_type: admin-properties
-        ignore_secret: true
-        config_map:
-          db_root_user:
-            value: root
-          key_x2:
-            value: value_y2
-            regex: ^your_regex to fully replace
+        config_key: db_root_user
+        config_value: root
+        config_file_loc: /var/lib/ambari-server/resources/scripts/configs.sh
 '''
 from ansible.module_utils.basic import *
 import json
