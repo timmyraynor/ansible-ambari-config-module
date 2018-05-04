@@ -111,7 +111,8 @@ def main():
         cluster_name=dict(type='str', default=None, required=True),
         config_type=dict(type='str', default=None, required=True),
         config_tag=dict(type='str', default=None, required=False),
-        ignore_secret=dict(default=True, required=False, choices=[True, False]),
+        ignore_secret=dict(default=True, required=False,
+                           choices=[True, False]),
         config_map=dict(type='dict', default=None, required=True)
     )
 
@@ -156,8 +157,9 @@ def main():
                 ambari_url, username, password, cluster_name)
             config_tag = config_index[config_type]["tag"]
         # Get config using the effective tag
-        cluster_config = get_cluster_config(
+        overall_cluster_config = get_cluster_config(
             ambari_url, username, password, cluster_name, config_type, config_tag)
+        cluster_config = overall_cluster_config['properties']
         # Start iterate through the config with input
         changed = False
         result_map = {}
@@ -183,8 +185,9 @@ def main():
 
         if changed:
             request = update_cluster_config(
-                ambari_url, username, password, cluster_name, config_type, result_map)
-            module.exit_json(changed=True, results=request.content, msg=result_map)
+                ambari_url, username, password, cluster_name, config_type, result_map, extract_properties_attributes(overall_cluster_config))
+            module.exit_json(
+                changed=True, results=request.content, msg=result_map)
         else:
             module.exit_json(changed=False, msg='No changes in config')
     except requests.ConnectionError as e:
@@ -211,7 +214,7 @@ def get_config_desired_value(current_map, key, desired_value, regex):
             return (result, True)
 
 
-def update_cluster_config(ambari_url, user, password, cluster_name, config_type, updated_map):
+def update_cluster_config(ambari_url, user, password, cluster_name, config_type, updated_map, properties_attributes):
     ts = time.time()
     tag_ts = ts * 1000
     payload = {
@@ -220,6 +223,8 @@ def update_cluster_config(ambari_url, user, password, cluster_name, config_type,
         'properties': updated_map,
         'service_config_version_note': 'Ansible module syncing',
     }
+    if properties_attributes is not None:
+        payload['properties_attributes'] = properties_attributes
     put_body = {'Clusters': {'desired_config': []}}
     put_body['Clusters']['desired_config'].append(payload)
     put_list = []
@@ -233,6 +238,15 @@ def update_cluster_config(ambari_url, user, password, cluster_name, config_type,
                     request message {1}'.format(r.status_code, r.content)
         raise
     return r
+
+
+def extract_properties_attributes(overall_config):
+    try:
+        properties_attribute = overall_config['properties_attributes']
+        return properties_attribute
+    except KeyError:
+        properties_attribute = None
+        return properties_attribute
 
 
 def get_cluster_config_index(ambari_url, user, password, cluster_name):
@@ -259,9 +273,13 @@ def get_cluster_config(ambari_url, user, password, cluster_name, config_type, co
         raise
     config = json.loads(r.content)
     try:
-        result = config['items'][0]['properties']
-        return result
+        assert config['items'][0]['properties'] is not None
+        return config['items'][0]
     except KeyError as e:
+        e.message = 'Could not find the right properties key, request code {0}, \
+                     possiblly having a wrong tag, response content is: {1}'.format(r.status_code, r.content)
+        raise
+    except AssertionError as e:
         e.message = 'Could not find the right properties key, request code {0}, \
                      possiblly having a wrong tag, response content is: {1}'.format(r.status_code, r.content)
         raise
