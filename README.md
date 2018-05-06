@@ -13,17 +13,23 @@ Python
 ## How to include this module
 1. Create a folder under your ansible playbook root path e.g. `extra_modules`
     
-    mkdir <path-to-ansible-playbook>/extra_modules
+    `mkdir <path-to-ansible-playbook>/extra_modules`
 
 2. Git clone this repository or copy the file across to the folder
    
-    cp ambari_cluster_config.py <path-to-ansible-playbook>/extra_modules
+    `cp ambari_cluster_config.py <path-to-ansible-playbook>/extra_modules`
 
 3. Create an `ansible.cfg` file under your project root and add following line into it:
 
-    library=./extra_modules
+    `library=./extra_modules`
 
 4. Start using this module
+
+## Module modes:
+This module support 3 modes:
+- Simple key-value replacement
+- Regex based replacement. e.g. `<HistoryDays>30</HistoryDays> (regex: <HistoryDays>\d+</HistoryDays>`) replace with `<HistoryDays>20</HistoryDays>` 
+- File based replacement, replace the config content with the file content (Working in progress...)
 
 
 
