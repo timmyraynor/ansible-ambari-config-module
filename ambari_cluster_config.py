@@ -69,6 +69,7 @@ EXAMPLES = '''
             value: value_y2
             regex: ^your_regex to fully replace
 '''
+
 from ansible.module_utils.basic import *
 import json
 import os
@@ -172,9 +173,9 @@ def main():
                     result_map[key] = current_value
                 else:
                     # Mismatched!
-                    # Get the require-to-update value base on regex/non-regex
+                    # Get the require-to-update value base on regex/non-regex or file
                     (actual_value, updated) = get_config_desired_value(
-                        cluster_config, key, desired_value, config_map[key].get('regex'))
+                        cluster_config, key, desired_value, config_map[key].get('regex'), config_map[key].get('file'))
                     # base on the regex sub, if not changed then change the change state to False
                     if ignore_secret and current_value.startswith('SECRET'):
                         updated = False
@@ -200,18 +201,20 @@ def main():
             msg="Ambari client exception occurred: " + str(e.message))
 
 
-def get_config_desired_value(current_map, key, desired_value, regex):
-    if regex is None or regex == '':
+def get_config_desired_value(current_map, key, desired_value, regex, file_content):
+    if regex is not None and file_content is not None:
+        raise Exception('regex/file properties are mutually excludesive....')
+
+    if regex is None or regex == '' and file_content is None or file_content == '':
         # if not contains regex, straight return the desired_value
         return (desired_value, True)
+    elif file_content is not None and file_content != '':
+        linestring = open(file_content, 'r').read()
+        return (linestring, linestring == current_map[key])
     else:
         # if contains regex, us re.sub to replace the regex pattern with desired_value
         result = re.sub(regex, desired_value, current_map[key])
-        if result == current_map[key]:
-            # if result not changed, then mark as not changed
-            return (result, False)
-        else:
-            return (result, True)
+        return (result, result == current_map[key])
 
 
 def update_cluster_config(ambari_url, user, password, cluster_name, config_type, updated_map, properties_attributes):
