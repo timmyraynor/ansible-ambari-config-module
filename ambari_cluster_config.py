@@ -299,14 +299,7 @@ def put(ambari_url, user, password, path, data):
     r = requests.put(ambari_url + path, data=data,
                      auth=(user, password), headers=headers)
     return r
-
-
-def post(ambari_url, user, password, path, data):
-    headers = {'X-Requested-By': 'ambari'}
-    r = requests.post(ambari_url + path, data=data,
-                      auth=(user, password), headers=headers)
-    return r
-
+    
 
 if __name__ == '__main__':
     main()
