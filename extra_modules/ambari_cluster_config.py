@@ -175,8 +175,9 @@ def process_ambari_config(module, host, port, username, password, cluster_name, 
             current_value = cluster_config[key]
             if key in config_map:
                 desired_value = config_map[key]['value']
-                if current_value == desired_value or str(current_value).lower() == str(desired_value).lower():
-                    # if value matched, put it directly into the map
+                if config_map[key].get('file') is None
+                    and (current_value == desired_value or str(current_value).lower() == str(desired_value).lower()):
+                        # if value matched, put it directly into the map
                     result_map[key] = current_value
                 else:
                     # Mismatched!
@@ -230,7 +231,7 @@ def get_config_desired_value(current_map, key, desired_value, regex, file_conten
     if regex is not None and file_content is not None:
         raise Exception('regex/file properties are mutually excludesive....')
 
-    if regex is None or regex == '' and file_content is None or file_content == '':
+    if (regex is None or regex == '') and (file_content is None or file_content == ''):
         # if not contains regex, straight return the desired_value
         return (desired_value, True)
     elif file_content is not None and file_content != '':
