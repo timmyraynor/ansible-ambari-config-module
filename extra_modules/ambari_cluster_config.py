@@ -149,6 +149,10 @@ def main():
     config_map = p.get('config_map')
     ignore_secret = p.get('ignore_secret')
 
+    process_ambari_config(module, host, port, username, password, cluster_name, config_type, config_tag, config_map, ignore_secret)
+
+
+def process_ambari_config(module, host, port, username, password, cluster_name, config_type, config_tag, config_map, ignore_secret):
     ambari_url = 'http://{0}:{1}'.format(host, port)
 
     try:
