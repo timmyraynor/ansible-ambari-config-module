@@ -4,16 +4,13 @@
   tasks:
     - name: Configure Ambari
       ambari_cluster_config:
-        host: localhost
+        host: 172.17.0.3
         port: 8080
         username: admin
         password: admin
-        cluster_name: test
-        config_type: admin-properties
+        cluster_name: testa
+        config_type: kafka-broker
         ignore_secret: true
         config_map:
-          db_root_user:
-            value: root
-          key_x2:
-            value: value_y2
-            regex: ^your_regex to fully replace
+          log.retention.hours:
+            value: 150

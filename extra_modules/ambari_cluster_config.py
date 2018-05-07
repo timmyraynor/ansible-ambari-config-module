@@ -149,7 +149,8 @@ def main():
     config_map = p.get('config_map')
     ignore_secret = p.get('ignore_secret')
 
-    process_ambari_config(module, host, port, username, password, cluster_name, config_type, config_tag, config_map, ignore_secret)
+    process_ambari_config(module, host, port, username, password,
+                          cluster_name, config_type, config_tag, config_map, ignore_secret)
 
 
 def process_ambari_config(module, host, port, username, password, cluster_name, config_type, config_tag, config_map, ignore_secret):
@@ -167,12 +168,14 @@ def process_ambari_config(module, host, port, username, password, cluster_name, 
         cluster_config = overall_cluster_config['properties']
         # Start iterate through the config with input
         changed = False
+        has_secrets = False
         result_map = {}
+        updated_map = {}
         for key in cluster_config:
             current_value = cluster_config[key]
             if key in config_map:
                 desired_value = config_map[key]['value']
-                if current_value == desired_value:
+                if current_value == desired_value or str(current_value).lower() == str(desired_value).lower():
                     # if value matched, put it directly into the map
                     result_map[key] = current_value
                 else:
@@ -183,8 +186,16 @@ def process_ambari_config(module, host, port, username, password, cluster_name, 
                     # base on the regex sub, if not changed then change the change state to False
                     if ignore_secret and current_value.startswith('SECRET'):
                         updated = False
+                        has_secrets = True
                     changed = changed or updated
                     result_map[key] = actual_value
+                    if updated:
+                        if 'password' in key or 'pw' in key or 'token' in key:
+                            updated_map[key] = {'origin': hash_passwords(
+                                cluster_config[key]), 'changed_to': hash_passwords(actual_value)}
+                        else:
+                            updated_map[key] = {
+                                'origin': cluster_config[key], 'changed_to': actual_value}
             else:
                 result_map[key] = current_value
 
@@ -192,9 +203,15 @@ def process_ambari_config(module, host, port, username, password, cluster_name, 
             request = update_cluster_config(
                 ambari_url, username, password, cluster_name, config_type, result_map, extract_properties_attributes(overall_cluster_config))
             module.exit_json(
-                changed=True, results=request.content, msg=result_map)
+                changed=True, results=request.content, msg={'result': result_map, 'updates': updated_map})
         else:
-            module.exit_json(changed=False, msg='No changes in config')
+            if has_secrets:
+                request = update_cluster_config(ambari_url, username, password, cluster_name,
+                                                config_type, result_map, extract_properties_attributes(overall_cluster_config))
+                module.exit_json(
+                    changed=False, results=request.content, msg={'result': result_map, 'updates': updated_map})
+            else:
+                module.exit_json(changed=False, msg='No changes in config')
     except requests.ConnectionError as e:
         module.fail_json(
             msg="Could not connect to Ambari client: " + str(e.message))
@@ -203,6 +220,10 @@ def process_ambari_config(module, host, port, username, password, cluster_name, 
     except Exception as e:
         module.fail_json(
             msg="Ambari client exception occurred: " + str(e.message))
+
+
+def hash_passwords(pw):
+    return '*' * len(pw)
 
 
 def get_config_desired_value(current_map, key, desired_value, regex, file_content):
@@ -303,7 +324,7 @@ def put(ambari_url, user, password, path, data):
     r = requests.put(ambari_url + path, data=data,
                      auth=(user, password), headers=headers)
     return r
-    
+
 
 if __name__ == '__main__':
     main()
