@@ -1,5 +1,7 @@
 # ansible-ambari-config-module
-A module that update Ambari configuration through Ambari API
+A module that update Ambari configuration through Ambari API. Please find the actual module file under:
+
+    `extra_modules/ambari_cluster_config.py`
 
 ## Dependencies:
 
