@@ -28,3 +28,15 @@
         cluster_name: dipa
         service: HDFS
         state: started
+
+- hosts: localhost
+  tasks:
+    - name: Configure Ambari
+      ambari_service_control:
+        host: 172.17.0.3
+        port: 8080
+        username: admin
+        password: admin
+        cluster_name: dipa
+        service: all
+        state: installed
