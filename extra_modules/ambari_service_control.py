@@ -198,7 +198,7 @@ def update_service_state(cluster, service_name, state, ambari_url, username, pas
 
 def process_ambari_request_response(r, cluster_name, ambari_url, user, password):
     try:
-        assert r.status_code == 200 or r.status_code == 201
+        assert r.status_code == 200 or r.status_code == 201 or r.status_code == 202
     except AssertionError as e:
         e.message = 'Coud not process response as: request code {0}, \
                     request message {1}'.format(r.status_code, r.content)
@@ -253,7 +253,7 @@ def wait_for_request_bounded(cluster_name, ambari_url, user, password, request_m
 def get_all_services_states(ambari_url, user, password, cluster_name):
     result = get(ambari_url, user, password,
                  '/api/v1/clusters/{0}/services?fields=ServiceInfo/state,ServiceInfo/maintenance_state'.format(cluster_name))
-    service_state = json.loads(result)
+    service_state = json.loads(result.content)
     return service_state['items']
 
 
