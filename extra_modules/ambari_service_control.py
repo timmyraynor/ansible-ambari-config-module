@@ -70,7 +70,7 @@ except ImportError:
 else:
     YAML_FOUND = True
 
-
+import time
 import traceback
 
 
@@ -113,14 +113,25 @@ def main():
     services_fact = get_all_services_states(
         ambari_url, username, password, cluster_name)
 
-    if service_name.lower() == 'all':
-        # start/stop all services
-        process_all_services(ambari_url, username, password, module, cluster_name, state)
-    else:
-        # process individual services      
-        services_fact = get_all_services_states(
-        ambari_url, username, password, cluster_name)
-        process_individual_service(services_fact, ambari_url, username, password, module, cluster_name, service_name, state )
+    try:
+        if service_name.lower() == 'all':
+            # start/stop all services
+            process_all_services(ambari_url, username, password,
+                                module, cluster_name, state)
+        else:
+            # process individual services
+            services_fact = get_all_services_states(
+                ambari_url, username, password, cluster_name)
+            process_individual_service(
+                services_fact, ambari_url, username, password, module, cluster_name, service_name, state)
+    except requests.ConnectionError as e:
+        module.fail_json(
+            msg="Could not connect to Ambari client: " + str(e.message), stacktrace=traceback.format_exc())
+    except AssertionError as e:
+        module.fail_json(msg=e.message, stacktrace=traceback.format_exc())
+    except Exception as e:
+        module.fail_json(
+            msg="Ambari client exception occurred: " + str(e.message), stacktrace=traceback.format_exc())
 
 
 def process_all_services(ambari_url, username, password, module, cluster_name, state):
@@ -133,7 +144,7 @@ def process_all_services(ambari_url, username, password, module, cluster_name, s
             'context': '_PARSE_.{0}.ALL_SERVICES'.format(context_info),
             'operation_level': {
                 'level': 'CLUSTER',
-                'cluster_name' : cluster_name
+                'cluster_name': cluster_name
             }
         },
         'Body': {
@@ -143,9 +154,12 @@ def process_all_services(ambari_url, username, password, module, cluster_name, s
         }
     }
     r = put(ambari_url, username, password, '/api/v1/clusters/{0}/services'.format(
-                    cluster_name), json.dumps(payload))
-    module.exit_json(changed=True, results=r.content)
-    
+        cluster_name), json.dumps(payload))
+    progress, _ = process_ambari_request_response(
+        r, cluster_name, ambari_url, username, password)
+    module.exit_json(changed=True, results=r.content,
+                     request_status=json.dumps(progress))
+
 
 def process_individual_service(services_fact, ambari_url, username, password, module, cluster_name, service_name, state):
     for service_state in services_fact:
@@ -158,20 +172,82 @@ def process_individual_service(services_fact, ambari_url, username, password, mo
                     changed=False, msg='No changes in service state')
             else:
                 # Update state base on the service/state specified
-                payload = {
-                    'RequestInfo': {
-                        'context': '{0} {1} Service in Cluster[{2}] via API'.format(state, s_name, cluster_name)
-                    },
-                    'Body': {
-                        'ServiceInfo':  {
-                            'state': state.upper()
-                        }
-                    }
-                }
-                r = put(ambari_url, username, password, '/api/v1/clusters/{0}/services/{1}'.format(
-                    cluster_name, s_name.upper()), json.dumps(payload))
-                module.exit_json(
-                    changed=True, results=r.content)
+                r, progress = update_service_state(
+                    cluster_name, s_name, state, ambari_url, username, password)
+                module.exit_json(changed=True, results=r.content,
+                                 request_status=json.dumps(progress))
+
+
+def update_service_state(cluster, service_name, state, ambari_url, username, password):
+    payload = {
+        'RequestInfo': {
+            'context': '{0} {1} Service in Cluster[{2}] via API'.format(state, service_name, cluster)
+        },
+        'Body': {
+            'ServiceInfo':  {
+                'state': state.upper()
+            }
+        }
+    }
+    r = put(ambari_url, username, password, '/api/v1/clusters/{0}/services/{1}'.format(
+        cluster, service_name.upper()), json.dumps(payload))
+    progress, _ = process_ambari_request_response(
+        r, cluster, ambari_url, username, password)
+    return r, progress
+
+
+def process_ambari_request_response(r, cluster_name, ambari_url, user, password):
+    try:
+        assert r.status_code == 200 or r.status_code == 201
+    except AssertionError as e:
+        e.message = 'Coud not process response as: request code {0}, \
+                    request message {1}'.format(r.status_code, r.content)
+        raise
+
+    response = json.loads(r.content)
+    request_meta = response.get('Requests')
+
+    try:
+        request_status = request_meta.get('status')
+        assert request_status.upper() == 'ACCEPTED' or request_status.upper() == 'COMPLETED'
+    except AssertionError as e:
+        e.messge = 'Request sent to ambari server is not accepted or completed. request code: {0}, messge: {1}'.format(
+            r.status_code, r.content)
+        raise
+
+    retry_counter = 0
+    while True and retry_counter < 10:
+        progress, completed = wait_for_request_bounded(
+            cluster_name, ambari_url, user, password, request_meta)
+        if completed:
+            return progress, completed
+        else:
+            time.sleep(10)
+            retry_counter = retry_counter + 1
+
+    raise Exception('Max request waiting retries')
+
+
+def wait_for_request_bounded(cluster_name, ambari_url, user, password, request_meta):
+    res = get(ambari_url, user, password,
+              '/api/v1/clusters/{0}/requests/{1}'.format(cluster_name, request_meta.get('id')))
+    try:
+        assert res.status_code == 200 or res.status_code == 201
+    except AssertionError as e:
+        e.message = 'Coud not obtain requests status: request code {0}, \
+                    request message {1}'.format(res.status_code, res.content)
+        raise
+    progress = json.loads(res.content)
+    try:
+        assert progress.get('Requests').get(
+            'request_status').upper() != 'FAILED'
+    except AssertionError as e:
+        e.messge = 'Request has failed due to: {0}'.format(res.content)
+        raise
+    if progress.get('Requests').get('request_status').upper() == 'COMPLETED':
+        return progress, True
+    else:
+        return progress, False
 
 
 def get_all_services_states(ambari_url, user, password, cluster_name):
