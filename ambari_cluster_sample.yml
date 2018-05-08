@@ -8,9 +8,10 @@
         port: 8080
         username: admin
         password: admin
-        cluster_name: testa
+        cluster_name: dipa
         config_type: kafka-broker
         ignore_secret: true
+        timeout_sec: 1
         config_map:
           log.retention.hours:
             value: 150

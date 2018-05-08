@@ -45,7 +45,8 @@ options:
 '''
 
 EXAMPLES = '''
-# must use full relative path to any files in stored in roles/role_name/files/
+# If you are aiming to provide a full file replacement / template replacement, please use the `lookup` plugin provided
+# in native ansible
 
 # NOT SUPPORT list:
   - Don't support any config that is not within Ambari config, so if the config file does not have a particular key
@@ -62,15 +63,18 @@ EXAMPLES = '''
         cluster_name: my_cluster
         config_type: admin-properties
         ignore_secret: true
+        timeout_sec: 10
         config_map:
           db_root_user:
             value: root
           key_x2:
             value: value_y2
             regex: ^your_regex to fully replace
+          key_x3:
+            value: "{{lookup('template', './files/mytemplate.j2')}}"
 '''
 
-from ansible.module_utils.basic import *
+from ansible.module_utils.basic import AnsibleModule
 import json
 import os
 try:
@@ -101,6 +105,8 @@ except ImportError:
 else:
     REGEX_FOUND = True
 
+import traceback
+
 
 def main():
 
@@ -114,6 +120,7 @@ def main():
         config_tag=dict(type='str', default=None, required=False),
         ignore_secret=dict(default=True, required=False,
                            choices=[True, False]),
+        timeout_sec=dict(type='int', default=10, required=False),
         config_map=dict(type='dict', default=None, required=True)
     )
 
@@ -148,23 +155,24 @@ def main():
     config_tag = p.get('config_tag')
     config_map = p.get('config_map')
     ignore_secret = p.get('ignore_secret')
+    connection_timeout = p.get('timeout_sec')
 
     process_ambari_config(module, host, port, username, password,
-                          cluster_name, config_type, config_tag, config_map, ignore_secret)
+                          cluster_name, config_type, config_tag, config_map, ignore_secret, connection_timeout)
 
 
-def process_ambari_config(module, host, port, username, password, cluster_name, config_type, config_tag, config_map, ignore_secret):
+def process_ambari_config(module, host, port, username, password, cluster_name, config_type, config_tag, config_map, ignore_secret, connection_timeout):
     ambari_url = 'http://{0}:{1}'.format(host, port)
 
     try:
         # Get current effective version/tag if not specified
         if config_tag is None:
             config_index = get_cluster_config_index(
-                ambari_url, username, password, cluster_name)
+                ambari_url, username, password, cluster_name, connection_timeout)
             config_tag = config_index[config_type]["tag"]
         # Get config using the effective tag
         overall_cluster_config = get_cluster_config(
-            ambari_url, username, password, cluster_name, config_type, config_tag)
+            ambari_url, username, password, cluster_name, config_type, config_tag, connection_timeout)
         cluster_config = overall_cluster_config['properties']
         # Start iterate through the config with input
         changed = False
@@ -174,16 +182,15 @@ def process_ambari_config(module, host, port, username, password, cluster_name, 
         for key in cluster_config:
             current_value = cluster_config[key]
             if key in config_map:
-                desired_value = config_map[key]['value']
-                if config_map[key].get('file') is None
-                    and (current_value == desired_value or str(current_value).lower() == str(desired_value).lower()):
-                        # if value matched, put it directly into the map
+                desired_value = config_map[key].get('value')
+                if desired_value is not None and (current_value == desired_value or str(current_value).lower() == str(desired_value).lower()):
+                    # if value matched, put it directly into the map
                     result_map[key] = current_value
                 else:
                     # Mismatched!
-                    # Get the require-to-update value base on regex/non-regex or file
+                    # Get the require-to-update value base on regex/non-regex
                     (actual_value, updated) = get_config_desired_value(
-                        cluster_config, key, desired_value, config_map[key].get('regex'), config_map[key].get('file'))
+                        cluster_config, key, desired_value, config_map[key].get('regex'))
                     # base on the regex sub, if not changed then change the change state to False
                     if ignore_secret and current_value.startswith('SECRET'):
                         updated = False
@@ -202,48 +209,42 @@ def process_ambari_config(module, host, port, username, password, cluster_name, 
 
         if changed:
             request = update_cluster_config(
-                ambari_url, username, password, cluster_name, config_type, result_map, extract_properties_attributes(overall_cluster_config))
+                ambari_url, username, password, cluster_name, config_type, result_map, extract_properties_attributes(overall_cluster_config), connection_timeout)
             module.exit_json(
                 changed=True, results=request.content, msg={'result': result_map, 'updates': updated_map})
         else:
             if has_secrets:
                 request = update_cluster_config(ambari_url, username, password, cluster_name,
-                                                config_type, result_map, extract_properties_attributes(overall_cluster_config))
+                                                config_type, result_map, extract_properties_attributes(overall_cluster_config), connection_timeout)
                 module.exit_json(
                     changed=False, results=request.content, msg={'result': result_map, 'updates': updated_map})
             else:
                 module.exit_json(changed=False, msg='No changes in config')
     except requests.ConnectionError as e:
         module.fail_json(
-            msg="Could not connect to Ambari client: " + str(e.message))
+            msg="Could not connect to Ambari client: " + str(e.message), stacktrace=traceback.format_exc())
     except AssertionError as e:
-        module.fail_json(msg=e.message)
+        module.fail_json(msg=e.message, stacktrace=traceback.format_exc())
     except Exception as e:
         module.fail_json(
-            msg="Ambari client exception occurred: " + str(e.message))
+            msg="Ambari client exception occurred: " + str(e.message), stacktrace=traceback.format_exc())
 
 
 def hash_passwords(pw):
     return '*' * len(pw)
 
 
-def get_config_desired_value(current_map, key, desired_value, regex, file_content):
-    if regex is not None and file_content is not None:
-        raise Exception('regex/file properties are mutually excludesive....')
-
-    if (regex is None or regex == '') and (file_content is None or file_content == ''):
+def get_config_desired_value(current_map, key, desired_value, regex):
+    if regex is None or regex == '':
         # if not contains regex, straight return the desired_value
-        return (desired_value, True)
-    elif file_content is not None and file_content != '':
-        linestring = open(file_content, 'r').read()
-        return (linestring, linestring == current_map[key])
+        return desired_value, True
     else:
         # if contains regex, us re.sub to replace the regex pattern with desired_value
         result = re.sub(regex, desired_value, current_map[key])
-        return (result, result == current_map[key])
+        return result, result == current_map[key]
 
 
-def update_cluster_config(ambari_url, user, password, cluster_name, config_type, updated_map, properties_attributes):
+def update_cluster_config(ambari_url, user, password, cluster_name, config_type, updated_map, properties_attributes, connection_timeout):
     ts = time.time()
     tag_ts = ts * 1000
     payload = {
@@ -259,7 +260,7 @@ def update_cluster_config(ambari_url, user, password, cluster_name, config_type,
     put_list = []
     put_list.append(put_body)
     r = put(ambari_url, user, password,
-            '/api/v1/clusters/{0}'.format(cluster_name), json.dumps(put_list))
+            '/api/v1/clusters/{0}'.format(cluster_name), json.dumps(put_list), connection_timeout)
     try:
         assert r.status_code == 200 or r.status_code == 201
     except AssertionError as e:
@@ -278,9 +279,9 @@ def extract_properties_attributes(overall_config):
         return properties_attribute
 
 
-def get_cluster_config_index(ambari_url, user, password, cluster_name):
+def get_cluster_config_index(ambari_url, user, password, cluster_name, connection_timeout):
     r = get(ambari_url, user, password,
-            '/api/v1/clusters/{0}?fields=Clusters/desired_configs'.format(cluster_name))
+            '/api/v1/clusters/{0}?fields=Clusters/desired_configs'.format(cluster_name), connection_timeout)
     try:
         assert r.status_code == 200
     except AssertionError as e:
@@ -291,9 +292,9 @@ def get_cluster_config_index(ambari_url, user, password, cluster_name):
     return clusters['Clusters']['desired_configs']
 
 
-def get_cluster_config(ambari_url, user, password, cluster_name, config_type, config_tag):
+def get_cluster_config(ambari_url, user, password, cluster_name, config_type, config_tag, connection_timeout):
     r = get(ambari_url, user, password,
-            '/api/v1/clusters/{0}/configurations?type={1}&tag={2}'.format(cluster_name, config_type, config_tag))
+            '/api/v1/clusters/{0}/configurations?type={1}&tag={2}'.format(cluster_name, config_type, config_tag), connection_timeout)
     try:
         assert r.status_code == 200
     except AssertionError as e:
@@ -314,16 +315,17 @@ def get_cluster_config(ambari_url, user, password, cluster_name, config_type, co
         raise
 
 
-def get(ambari_url, user, password, path):
+def get(ambari_url, user, password, path, connection_timeout):
     headers = {'X-Requested-By': 'ambari'}
-    r = requests.get(ambari_url + path, auth=(user, password), headers=headers)
+    r = requests.get(ambari_url + path, auth=(user, password),
+                     headers=headers, timeout=connection_timeout)
     return r
 
 
-def put(ambari_url, user, password, path, data):
+def put(ambari_url, user, password, path, data, connection_timeout):
     headers = {'X-Requested-By': 'ambari'}
     r = requests.put(ambari_url + path, data=data,
-                     auth=(user, password), headers=headers)
+                     auth=(user, password), headers=headers, timeout=connection_timeout)
     return r
 
 
