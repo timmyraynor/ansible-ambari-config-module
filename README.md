@@ -105,4 +105,11 @@ Please note that for things like `content` it could be a very large template fil
 
 
 
+### ambari_service_control module
+Ambari service control module controls the Ambari Services start or stop (installed in Ambari Service language).
+
+Please refer to the `ambari_cluster_sample.yml` file for a better reference.
+
+
+
 

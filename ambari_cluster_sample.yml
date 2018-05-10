@@ -8,7 +8,7 @@
         port: 8080
         username: admin
         password: admin
-        cluster_name: dipa
+        cluster_name: my_cluster
         config_type: kafka-broker
         ignore_secret: true
         timeout_sec: 1
@@ -25,7 +25,7 @@
         port: 8080
         username: admin
         password: admin
-        cluster_name: dipa
+        cluster_name: my_cluster
         service: HDFS
         state: started
 
@@ -37,6 +37,6 @@
         port: 8080
         username: admin
         password: admin
-        cluster_name: dipa
+        cluster_name: my_cluster
         service: all
         state: installed
