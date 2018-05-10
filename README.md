@@ -52,7 +52,7 @@ e.g. A typical config API will look like:
 
 Where `admin-log4j` is the `config type` and `version1525157305324` is the `config tag`. And underneath you will see the actual properties like:
 
-    `{
+    {
         "href" : "http://master01.dipa-test-2.labs.restest.nbn-aws.local:8080/api/v1/clusters/DIPA/configurations?type=admin-log4j&tag=version1525157305324",
         "items" : [
             {
@@ -71,11 +71,11 @@ Where `admin-log4j` is the `config type` and `version1525157305324` is the `conf
             }
             }
         ]
-        }`
+    }
 
 In the above case, we could change the `ranger_xa_log_maxfilesize` from `256` to `512` by using this module like:
 
-    `ambari_cluster_config:
+    ambari_cluster_config:
         host: localhost
         port: 8080
         username: admin
@@ -86,11 +86,11 @@ In the above case, we could change the `ranger_xa_log_maxfilesize` from `256` to
         timeout_sec: 10
         config_map:
           ranger_xa_log_maxfilesize:
-            value: 512`
+            value: 512
 
 Please note that for things like `content` it could be a very large template file in Ambari, what you could do is:
 
-    `ambari_cluster_config:
+    ambari_cluster_config:
         host: localhost
         port: 8080
         username: admin
@@ -101,7 +101,7 @@ Please note that for things like `content` it could be a very large template fil
         timeout_sec: 10
         config_map:
           content:
-            value: "{{ lookup('template', './file/content.template.j2') }}"`
+            value: "{{ lookup('template', './file/content.template.j2') }}"
 
 
 
