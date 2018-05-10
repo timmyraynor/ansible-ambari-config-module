@@ -4,7 +4,7 @@
 # Documentation section
 DOCUMENTATION = '''
 ---
-module: ambari_cluster_config
+module: ambari_service_control
 version_added: "1.0"
 short_description: Capture or update Ambari cluster configurations
   - Capture or update Ambari cluster configurations
@@ -26,9 +26,12 @@ options:
     description:
       The name of the cluster in ambari
     required: yes
+  service:
+    description:
+      The name of the service you want to start or stop(installed), use 'all' to stop all or start all
   state:
     description:
-      The configuration type for Ambari cluster configurations
+      start or stop (installed in ambari language), the desired state for the ambari service ['STARTED', 'INSTALLED']
     required: yes
 '''
 
@@ -50,7 +53,17 @@ EXAMPLES = '''
         password: admin
         cluster_name: my_cluster
         service: HDFS
-        state: STARTED
+        state: installed
+
+  - name: Update a cluster configuration
+    ambari_service_control:
+        host: localhost
+        port: 8080
+        username: admin
+        password: admin
+        cluster_name: my_cluster
+        service: all
+        state: started
 '''
 
 from ansible.module_utils.basic import AnsibleModule
@@ -70,7 +83,13 @@ except ImportError:
 else:
     YAML_FOUND = True
 
-import time
+try:
+    import time
+except ImportError:
+    TIME_FOUND = False
+else:
+    TIME_FOUND = True
+
 import traceback
 
 
@@ -98,6 +117,11 @@ def main():
     if not YAML_FOUND:
         module.fail_json(
             msg='pyYaml library is required for this module')
+    
+    if not TIME_FOUND:
+        module.fail_json(
+            msg='pyYaml library is required for this module')
+
 
     p = module.params
 
