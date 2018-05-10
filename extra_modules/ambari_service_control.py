@@ -33,6 +33,12 @@ options:
     description:
       start or stop (installed in ambari language), the desired state for the ambari service ['STARTED', 'INSTALLED']
     required: yes
+  retry:
+    description:
+      The time to retry to wait for request finished, default value is 60, depends on how many services you are trying to restart
+  wait_interval:
+    description:
+      The wait interval between every retry, default value is 10s
 '''
 
 EXAMPLES = '''
@@ -64,6 +70,8 @@ EXAMPLES = '''
         cluster_name: my_cluster
         service: all
         state: started
+        retry: 10
+        wait_interval: 10
 '''
 
 from ansible.module_utils.basic import AnsibleModule
@@ -104,6 +112,8 @@ def main():
         service=dict(type='str', default=None, required=True),
         state=dict(type='str', default=None, required=True,
                    choices=['started', 'installed']),
+        retry=dict(type='int', default=60, required=False),
+        wait_interval = dict(type='int', default=10, required=False)
     )
 
     module = AnsibleModule(
@@ -132,6 +142,8 @@ def main():
     cluster_name = p.get('cluster_name')
     service_name = p.get('service')
     state = p.get('state')
+    retry = p.get('retry')
+    wait_interval = p.get('wait_interval')
 
     ambari_url = 'http://{0}:{1}'.format(host, port)
     services_fact = get_all_services_states(
@@ -141,13 +153,13 @@ def main():
         if service_name.lower() == 'all':
             # start/stop all services
             process_all_services(ambari_url, username, password,
-                                module, cluster_name, state)
+                                module, cluster_name, state, retry, wait_interval)
         else:
             # process individual services
             services_fact = get_all_services_states(
                 ambari_url, username, password, cluster_name)
             process_individual_service(
-                services_fact, ambari_url, username, password, module, cluster_name, service_name, state)
+                services_fact, ambari_url, username, password, module, cluster_name, service_name, state, retry, wait_interval)
     except requests.ConnectionError as e:
         module.fail_json(
             msg="Could not connect to Ambari client: " + str(e.message), stacktrace=traceback.format_exc())
@@ -158,7 +170,7 @@ def main():
             msg="Ambari client exception occurred: " + str(e.message), stacktrace=traceback.format_exc())
 
 
-def process_all_services(ambari_url, username, password, module, cluster_name, state):
+def process_all_services(ambari_url, username, password, module, cluster_name, state, retry, wait_interval):
     if state == 'started':
         context_info = 'START'
     else:
@@ -180,12 +192,12 @@ def process_all_services(ambari_url, username, password, module, cluster_name, s
     r = put(ambari_url, username, password, '/api/v1/clusters/{0}/services'.format(
         cluster_name), json.dumps(payload))
     progress, _ = process_ambari_request_response(
-        r, cluster_name, ambari_url, username, password)
+        r, cluster_name, ambari_url, username, password, retry, wait_interval)
     module.exit_json(changed=True, results=r.content,
                      request_status=json.dumps(progress))
 
 
-def process_individual_service(services_fact, ambari_url, username, password, module, cluster_name, service_name, state):
+def process_individual_service(services_fact, ambari_url, username, password, module, cluster_name, service_name, state, retry, wait_interval):
     for service_state in services_fact:
         s_name = service_state.get('ServiceInfo').get('service_name')
         s_state = service_state.get('ServiceInfo').get('state')
@@ -196,13 +208,12 @@ def process_individual_service(services_fact, ambari_url, username, password, mo
                     changed=False, msg='No changes in service state')
             else:
                 # Update state base on the service/state specified
-                r, progress = update_service_state(
-                    cluster_name, s_name, state, ambari_url, username, password)
+                r, progress = update_service_state(cluster_name, s_name, state, ambari_url, username, password, retry, wait_interval)
                 module.exit_json(changed=True, results=r.content,
                                  request_status=json.dumps(progress))
 
 
-def update_service_state(cluster, service_name, state, ambari_url, username, password):
+def update_service_state(cluster, service_name, state, ambari_url, username, password, retry, wait_interval):
     payload = {
         'RequestInfo': {
             'context': '{0} {1} Service in Cluster[{2}] via API'.format(state, service_name, cluster)
@@ -215,12 +226,11 @@ def update_service_state(cluster, service_name, state, ambari_url, username, pas
     }
     r = put(ambari_url, username, password, '/api/v1/clusters/{0}/services/{1}'.format(
         cluster, service_name.upper()), json.dumps(payload))
-    progress, _ = process_ambari_request_response(
-        r, cluster, ambari_url, username, password)
+    progress, _ = process_ambari_request_response(r, cluster, ambari_url, username, password, retry, wait_interval)
     return r, progress
 
 
-def process_ambari_request_response(r, cluster_name, ambari_url, user, password):
+def process_ambari_request_response(r, cluster_name, ambari_url, user, password, retry, wait_interval):
     try:
         assert r.status_code == 200 or r.status_code == 201 or r.status_code == 202
     except AssertionError as e:
@@ -240,13 +250,13 @@ def process_ambari_request_response(r, cluster_name, ambari_url, user, password)
         raise
 
     retry_counter = 0
-    while True and retry_counter < 10:
+    while True and retry_counter < retry:
         progress, completed = wait_for_request_bounded(
             cluster_name, ambari_url, user, password, request_meta)
         if completed:
             return progress, completed
         else:
-            time.sleep(10)
+            time.sleep(wait_interval)
             retry_counter = retry_counter + 1
 
     raise Exception('Max request waiting retries')
