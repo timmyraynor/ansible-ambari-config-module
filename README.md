@@ -114,6 +114,13 @@ Ambari service control module controls the Ambari Services start or stop (instal
 
 Please refer to the `ambari_cluster_sample.yml` file for a better reference.
 
+### Testing
+This module have a minimum test using `nosetests`. To run the test, you will need to run like:
+
+    nosetests -v
+
+To get a verbose output of the tests.
+
 
 
 
