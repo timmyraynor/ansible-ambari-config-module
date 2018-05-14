@@ -276,7 +276,7 @@ def wait_for_request_bounded(cluster_name, ambari_url, user, password, request_m
         assert progress.get('Requests').get(
             'request_status').upper() != 'FAILED'
     except AssertionError as e:
-        e.messge = 'Request has failed due to: {0}'.format(res.content)
+        e.message = 'Request has failed due to: {0}'.format(res.content)
         raise
     if progress.get('Requests').get('request_status').upper() == 'COMPLETED':
         return progress, True
