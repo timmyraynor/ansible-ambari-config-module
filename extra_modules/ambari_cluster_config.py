@@ -234,6 +234,15 @@ def sync_config_map_with_cluster(cluster_config, config_map, ignore_secret):
         else:
             result_map[key] = current_value
 
+    # Loop through all config_map and make sure additional keys are put into the map as well
+    for key in config_map:
+        if key not in cluster_config:
+            changed = True
+            result_map[key] = config_map.get(key)
+            updated_map[key] = {
+                'origin': 'no such key', 'changed_to': config_map.get(key)
+            }
+
     return changed, has_secrets, result_map, updated_map
 
 
