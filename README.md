@@ -4,7 +4,11 @@ A module that update Ambari configuration through Ambari API. Please find the ac
     extra_modules/ambari_cluster_config.py
     extra_modules/ambari_service_control.py
 
-**IMPORTANT** Please note that, the above modules are calling Ambari API, so **ideal location** to put those modules in is on the **ambari server node**. In that case you could just do localhost connection to your ambari server for setup. 
+**IMPORTANT** Please note that, the above modules are calling Ambari API, so **ideal location** to run those modules in is on the **ambari server node**. In that case you could just do localhost connection to your ambari server for setup. A example would be:
+
+    hosts: ambari-server
+    ambari_service_control:
+        host: localhost          ----> this will run the module on the ambari-server and try to request to its 'localhost'
 
 As the ambari_service_control module is calling the stop/start API, if running on multiple nodes, e.g. the `agent` nodes, this will create multiple start/stop requests which will impact on performance and execution sequences.
 
