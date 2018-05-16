@@ -174,38 +174,8 @@ def process_ambari_config(module, host, port, username, password, cluster_name, 
         overall_cluster_config = get_cluster_config(
             ambari_url, username, password, cluster_name, config_type, config_tag, connection_timeout)
         cluster_config = overall_cluster_config['properties']
-        # Start iterate through the config with input
-        changed = False
-        has_secrets = False
-        result_map = {}
-        updated_map = {}
-        for key in cluster_config:
-            current_value = cluster_config[key]
-            if key in config_map:
-                desired_value = config_map[key].get('value')
-                if desired_value is not None and (current_value == desired_value or str(current_value).lower() == str(desired_value).lower()):
-                    # if value matched, put it directly into the map
-                    result_map[key] = current_value
-                else:
-                    # Mismatched!
-                    # Get the require-to-update value base on regex/non-regex
-                    (actual_value, updated) = get_config_desired_value(
-                        cluster_config, key, desired_value, config_map[key].get('regex'))
-                    # base on the regex sub, if not changed then change the change state to False
-                    if ignore_secret and current_value.startswith('SECRET'):
-                        updated = False
-                        has_secrets = True
-                    changed = changed or updated
-                    result_map[key] = actual_value
-                    if updated:
-                        if 'password' in key or 'pw' in key or 'token' in key:
-                            updated_map[key] = {'origin': hash_passwords(
-                                cluster_config[key]), 'changed_to': hash_passwords(actual_value)}
-                        else:
-                            updated_map[key] = {
-                                'origin': cluster_config[key], 'changed_to': actual_value}
-            else:
-                result_map[key] = current_value
+        
+        changed, has_secrets, result_map, updated_map = sync_config_map_with_cluster(cluster_config, config_map, ignore_secret)
 
         if changed:
             request = update_cluster_config(
@@ -228,6 +198,43 @@ def process_ambari_config(module, host, port, username, password, cluster_name, 
     except Exception as e:
         module.fail_json(
             msg="Ambari client exception occurred: " + str(e.message), stacktrace=traceback.format_exc())
+
+
+def sync_config_map_with_cluster(cluster_config, config_map, ignore_secret):
+    changed = False
+    has_secrets = False
+    result_map = {}
+    updated_map = {}
+    # Start iterate through the config with input
+    for key in cluster_config:
+        current_value = cluster_config[key]
+        if key in config_map:
+            desired_value = config_map[key].get('value')
+            if desired_value is not None and (current_value == desired_value or str(current_value).lower() == str(desired_value).lower()):
+                # if value matched, put it directly into the map
+                result_map[key] = current_value
+            else:
+                # Mismatched!
+                # Get the require-to-update value base on regex/non-regex
+                (actual_value, updated) = get_config_desired_value(
+                    cluster_config, key, desired_value, config_map[key].get('regex'))
+                # base on the regex sub, if not changed then change the change state to False
+                if ignore_secret and current_value.startswith('SECRET'):
+                    updated = False
+                    has_secrets = True
+                changed = changed or updated
+                result_map[key] = actual_value
+                if updated:
+                    if 'password' in key or 'pw' in key or 'token' in key:
+                        updated_map[key] = {'origin': hash_passwords(
+                            cluster_config[key]), 'changed_to': hash_passwords(actual_value)}
+                    else:
+                        updated_map[key] = {
+                            'origin': cluster_config[key], 'changed_to': actual_value}
+        else:
+            result_map[key] = current_value
+
+    return changed, has_secrets, result_map, updated_map
 
 
 def hash_passwords(pw):
