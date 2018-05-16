@@ -48,10 +48,6 @@ EXAMPLES = '''
 # If you are aiming to provide a full file replacement / template replacement, please use the `lookup` plugin provided
 # in native ansible
 
-# NOT SUPPORT list:
-  - Don't support any config that is not within Ambari config, so if the config file does not have a particular key
-  you cannot add it.
-
 # example:
 
   - name: Update a cluster configuration
