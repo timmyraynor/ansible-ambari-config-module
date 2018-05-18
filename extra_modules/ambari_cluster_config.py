@@ -9,6 +9,9 @@ version_added: "1.0"
 short_description: Capture or update Ambari cluster configurations
   - Capture or update Ambari cluster configurations
 options:
+  protocol:
+    description:
+      The protocol for the ambari web server (http / https)
   host:
     description:
       The hostname for the ambari web server
@@ -52,6 +55,7 @@ EXAMPLES = '''
 
   - name: Update a cluster configuration
     ambari_cluster_config:
+        protocol: http
         host: localhost
         port: 8080
         username: admin
@@ -107,6 +111,7 @@ import traceback
 def main():
 
     argument_spec = dict(
+        protocol=dict(type='str', default='http', required=False),
         host=dict(type='str', default=None, required=True),
         port=dict(type='int', default=None, required=True),
         username=dict(type='str', default=None, required=True),
@@ -142,6 +147,7 @@ def main():
 
     p = module.params
 
+    protocol = p.get('protocol')
     host = p.get('host')
     port = p.get('port')
     username = p.get('username')
@@ -153,12 +159,12 @@ def main():
     ignore_secret = p.get('ignore_secret')
     connection_timeout = p.get('timeout_sec')
 
-    process_ambari_config(module, host, port, username, password,
+    process_ambari_config(module, protocol, host, port, username, password,
                           cluster_name, config_type, config_tag, config_map, ignore_secret, connection_timeout)
 
 
-def process_ambari_config(module, host, port, username, password, cluster_name, config_type, config_tag, config_map, ignore_secret, connection_timeout):
-    ambari_url = 'http://{0}:{1}'.format(host, port)
+def process_ambari_config(module, protocol, host, port, username, password, cluster_name, config_type, config_tag, config_map, ignore_secret, connection_timeout):
+    ambari_url = '{0}://{1}:{2}'.format(protocol, host, port)
 
     try:
         # Get current effective version/tag if not specified
@@ -234,9 +240,9 @@ def sync_config_map_with_cluster(cluster_config, config_map, ignore_secret):
     for key in config_map:
         if key not in cluster_config:
             changed = True
-            result_map[key] = config_map.get(key)
+            result_map[key] = config_map.get(key).get('value')
             updated_map[key] = {
-                'origin': 'no such key', 'changed_to': config_map.get(key)
+                'origin': 'no such key', 'changed_to': config_map.get(key).get('value')
             }
 
     return changed, has_secrets, result_map, updated_map
