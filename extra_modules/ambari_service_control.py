@@ -9,6 +9,9 @@ version_added: "1.0"
 short_description: Capture or update Ambari cluster configurations
   - Capture or update Ambari cluster configurations
 options:
+  protocol:
+    description:
+      The protocol for the ambari web server (http / https)
   host:
     description:
       The hostname for the ambari web server
@@ -53,6 +56,7 @@ EXAMPLES = '''
 
   - name: Update a cluster configuration
     ambari_service_control:
+        protocol: http
         host: localhost
         port: 8080
         username: admin
@@ -104,6 +108,7 @@ import traceback
 def main():
 
     argument_spec = dict(
+        protocol=dict(type='str', default='http', required=False),
         host=dict(type='str', default=None, required=True),
         port=dict(type='int', default=None, required=True),
         username=dict(type='str', default=None, required=True),
@@ -135,6 +140,7 @@ def main():
 
     p = module.params
 
+    protocol = p.get('protocol')
     host = p.get('host')
     port = p.get('port')
     username = p.get('username')
@@ -145,7 +151,7 @@ def main():
     retry = p.get('retry')
     wait_interval = p.get('wait_interval')
 
-    ambari_url = 'http://{0}:{1}'.format(host, port)
+    ambari_url = '{0}://{1}:{2}'.format(protocol, host, port)
     services_fact = get_all_services_states(
         ambari_url, username, password, cluster_name)
 
