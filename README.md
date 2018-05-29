@@ -3,6 +3,7 @@ A module that update Ambari configuration through Ambari API. Please find the ac
 
     extra_modules/ambari_cluster_config.py
     extra_modules/ambari_service_control.py
+    extra_modules/ambari_component_extend.py
 
 **IMPORTANT** Please note that, the above modules are calling Ambari API, so **ideal location** to run those modules in is on the **ambari server node**. In that case you could just do localhost connection to your ambari server for setup. A example would be:
 
@@ -117,6 +118,16 @@ Please note that for things like `content` it could be a very large template fil
 Ambari service control module controls the Ambari Services start or stop (installed in Ambari Service language).
 
 Please refer to the `ambari_cluster_sample.yml` file for a better reference.
+
+### ambari_component_extend module
+Ambari component extend module currently serve a basic concept of extending **Existing Services**. e.g. Add a new Data Node for HDFS.
+
+Please be aware, since this is targeting existing service:
+
+- it would **NOT** create a non-existing service 
+- it would **NOT** add a host to the cluster, it would assume the host does exist already (*open for improvement*)
+- it would **NOT** enable the component once it is installed into the host, instead, you should use the *ambari_service_control* module to do that
+
 
 ### Testing
 This module have a minimum test using `nosetests`. To run the test, you will need to run like:

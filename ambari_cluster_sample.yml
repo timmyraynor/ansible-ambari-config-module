@@ -20,8 +20,8 @@
         port: 8080
         username: admin
         password: admin
-        cluster_name: my_cluster
-        service: all
+        cluster_name: mycluster
+        service: HDFS
         state: installed
 
 - hosts: localhost
