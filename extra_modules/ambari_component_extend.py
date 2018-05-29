@@ -66,7 +66,6 @@ EXAMPLES = '''
         username: admin
         password: admin
         cluster_name: mycluster
-        service: HDFS
         component: DATANODE
         add_host: amb1.service.consul
 
@@ -77,7 +76,6 @@ EXAMPLES = '''
         username: admin
         password: admin
         cluster_name: mycluster
-        service: HDFS
         component: DATANODE
         add_host: amb1.service.consul
         retry: 10
@@ -120,11 +118,8 @@ def main():
         username=dict(type='str', default=None, required=True),
         password=dict(type='str', default=None, required=True, no_log=True),
         cluster_name=dict(type='str', default=None, required=True),
-        service=dict(type='str', default=None, required=True),
         component=dict(type='str', default=None, required=True),
-        add_host=dict(type='str', default=None, required=True),
-        retry=dict(type='int', default=60, required=False),
-        wait_interval = dict(type='int', default=10, required=False)
+        add_host=dict(type='str', default=None, required=True)
     )
 
     module = AnsibleModule(
@@ -138,11 +133,10 @@ def main():
     if not YAML_FOUND:
         module.fail_json(
             msg='pyYaml library is required for this module')
-    
+
     if not TIME_FOUND:
         module.fail_json(
             msg='pyYaml library is required for this module')
-
 
     p = module.params
 
@@ -152,26 +146,57 @@ def main():
     username = p.get('username')
     password = p.get('password')
     cluster_name = p.get('cluster_name')
-    service_name = p.get('service')
     component = p.get('component')
     hosttoadd = p.get('add_host')
     retry = p.get('retry')
     wait_interval = p.get('wait_interval')
 
     ambari_url = '{0}://{1}:{2}'.format(protocol, host, port)
-    
+
     try:
-        make_sure_host_exist(ambari_url, username, password, cluster_name, hosttoadd)
+        make_sure_host_exist(ambari_url, username,
+                             password, cluster_name, hosttoadd)
         # Add components to the host
-        add_response = post(ambari_url, username, password, '/api/v1/clusters/{0}/hosts/{1}/host_components/{2}'.format(cluster_name, hosttoadd, component), json.dumps({}) )
-        assert add_response.status_code == '200' or add_response.status_code == '201' or add_response.status_code == '202' 
-        # Install components to hosts
-        install_response = put(ambari_url, username, password, '/api/v1/clusters/{0}/hosts/{1}/host_components/{2}'.format(cluster_name, hosttoadd, component), json.dumps({
-            'HostRoles': {
-                'state' : 'INSTALLED'
-            }
-        }))
-        assert install_response.status_code == '200'
+        check_response = get(ambari_url, username, password,
+                             '/api/v1/clusters/{0}/hosts/{1}/host_components/{2}'.format(cluster_name, hosttoadd, component))
+        if check_response.status_code == 200:
+            module.exit_json(changed=False, result=check_response.content,
+                             msg='Nothing changed, component [{0}] exist for host [{1}]'.format(component, hosttoadd))
+        elif check_response.status_code == 404:
+            add_response = post(ambari_url, username, password, '/api/v1/clusters/{0}/hosts/{1}/host_components/{2}'.format(
+                cluster_name, hosttoadd, component), json.dumps({}))
+            assert_status(add_response, ['200', '201', '202'])
+            # Install components to hosts
+            r = put(ambari_url, username, password, '/api/v1/clusters/{0}/hosts/{1}/host_components/{2}'.format(cluster_name, hosttoadd, component), json.dumps({
+                'HostRoles': {
+                    'state': 'INSTALLED'
+                }
+            }))
+            assert_status(r, ['202'])
+            response = json.loads(r.content)
+            request_meta = response.get('Requests')
+            try:
+                request_status = request_meta.get('status')
+                assert request_status.upper() == 'ACCEPTED' or request_status.upper() == 'COMPLETED'
+            except AssertionError as e:
+                e.messge = 'Request sent to ambari server is not accepted or completed. request code: {0}, messge: {1}'.format(
+                    r.status_code, r.content)
+                raise
+
+            retry_counter = 0
+            while True and retry_counter < retry:
+                progress, completed = wait_for_request_bounded(
+                    cluster_name, ambari_url, username, password, request_meta)
+                if completed:
+                    module.exit_json(changed=True, results=progress)
+                else:
+                    time.sleep(wait_interval)
+                    retry_counter = retry_counter + 1
+
+            raise Exception('Max request waiting retries')
+        else:
+            raise Exception('Unknow status code from status check: {0}, response content: {1}'.format(
+                check_response.status_code, check_response))
 
     except requests.ConnectionError as e:
         module.fail_json(
@@ -183,18 +208,25 @@ def main():
             msg="Ambari client exception occurred: " + str(e.message), stacktrace=traceback.format_exc())
 
 
+def assert_status(response, expected):
+    assert str(response.status_code) in expected, 'Expected response code unmatch: Exp[{0}], Actual[{1}] \n Message: {2}'.format(
+        expected, response.status_code, response.content)
+
+
 def make_sure_host_exist(ambari_url, username, password, cluster_name, hosttoadd):
-    r = get(ambari_url, username, password, '/api/v1/clusters/{0}/hosts/{1}'.format(cluster_name, hosttoadd))
-    if r.status_code == '404':
+    r = get(ambari_url, username, password,
+            '/api/v1/clusters/{0}/hosts/{1}'.format(cluster_name, hosttoadd))
+    if str(r.status_code) == '404':
         # Host not found, try to add host
         payload = {}
-        create_host_response = put(ambari_url, username, password, '/api/v1/clusters/{0}/hosts/{1}'.format(cluster_name, hosttoadd), json.dumps(payload))
-        assert create_host_response.status_code == '200' or create_host_response.status_code == '201' or create_host_response.status_code == '202'
-    elif r.status_code == '200':
+        create_host_response = put(ambari_url, username, password,
+                                   '/api/v1/clusters/{0}/hosts/{1}'.format(cluster_name, hosttoadd), json.dumps(payload))
+        assert_status(create_host_response, ['200', '201', '202'])
+    elif str(r.status_code) == '200':
         pass
     else:
-        raise AssertionError(msg='Status code for checking host registration not support: {0}'.format(r.status_code))
-
+        raise AssertionError(
+            'Status code for checking host registration not support: {0}'.format(str(r.status_code)))
 
 
 def get(ambari_url, user, password, path, connection_timeout=10):
@@ -203,10 +235,11 @@ def get(ambari_url, user, password, path, connection_timeout=10):
                      headers=headers, timeout=connection_timeout)
     return r
 
+
 def post(ambari_url, user, password, path, data, connection_timeout=10):
     headers = {'X-Requested-By': 'ambari'}
-    r = requests.put(ambari_url + path, data=data,
-                     auth=(user, password), headers=headers, timeout=connection_timeout)
+    r = requests.post(ambari_url + path, data=data,
+                      auth=(user, password), headers=headers, timeout=connection_timeout)
     return r
 
 
@@ -215,6 +248,28 @@ def put(ambari_url, user, password, path, data, connection_timeout=10):
     r = requests.put(ambari_url + path, data=data,
                      auth=(user, password), headers=headers, timeout=connection_timeout)
     return r
+
+
+def wait_for_request_bounded(cluster_name, ambari_url, user, password, request_meta):
+    res = get(ambari_url, user, password,
+              '/api/v1/clusters/{0}/requests/{1}'.format(cluster_name, request_meta.get('id')))
+    try:
+        assert res.status_code == 200 or res.status_code == 201
+    except AssertionError as e:
+        e.message = 'Coud not obtain requests status: request code {0}, \
+                    request message {1}'.format(res.status_code, res.content)
+        raise
+    progress = json.loads(res.content)
+    try:
+        assert progress.get('Requests').get(
+            'request_status').upper() != 'FAILED'
+    except AssertionError as e:
+        e.message = 'Request has failed due to: {0}'.format(res.content)
+        raise
+    if progress.get('Requests').get('request_status').upper() == 'COMPLETED':
+        return progress, True
+    else:
+        return progress, False
 
 
 if __name__ == '__main__':

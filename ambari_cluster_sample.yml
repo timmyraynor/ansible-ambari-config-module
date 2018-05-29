@@ -2,32 +2,15 @@
 
 - hosts: localhost
   tasks:
-    - name: Configure Ambari
-      ambari_cluster_config:
+    - name: add HDFS DATANODE
+      ambari_component_extend:
         host: 172.17.0.3
         port: 8080
         username: admin
         password: admin
-        cluster_name: my_cluster
-        config_type: kafka-broker
-        ignore_secret: true
-        timeout_sec: 1
-        config_map:
-          log.retention.hours:
-            value: 150
-
-
-- hosts: localhost
-  tasks:
-    - name: Configure Ambari
-      ambari_service_control:
-        host: 172.17.0.3
-        port: 8080
-        username: admin
-        password: admin
-        cluster_name: my_cluster
-        service: HDFS
-        state: started
+        cluster_name: mycluster
+        component: DATANODE
+        add_host: amb2.service.consul
 
 - hosts: localhost
   tasks:
@@ -40,3 +23,57 @@
         cluster_name: my_cluster
         service: all
         state: installed
+
+- hosts: localhost
+  tasks:
+    - name: Configure Ambari
+      ambari_service_control:
+        host: 172.17.0.3
+        port: 8080
+        username: admin
+        password: admin
+        cluster_name: mycluster
+        service: HDFS
+        state: started
+
+
+# - hosts: localhost
+#   tasks:
+#     - name: Configure Ambari
+#       ambari_cluster_config:
+#         host: 172.17.0.3
+#         port: 8080
+#         username: admin
+#         password: admin
+#         cluster_name: my_cluster
+#         config_type: kafka-broker
+#         ignore_secret: true
+#         timeout_sec: 1
+#         config_map:
+#           log.retention.hours:
+#             value: 150
+
+
+# - hosts: localhost
+#   tasks:
+#     - name: Configure Ambari
+#       ambari_service_control:
+#         host: 172.17.0.3
+#         port: 8080
+#         username: admin
+#         password: admin
+#         cluster_name: my_cluster
+#         service: HDFS
+#         state: started
+
+# - hosts: localhost
+#   tasks:
+#     - name: Configure Ambari
+#       ambari_service_control:
+#         host: 172.17.0.3
+#         port: 8080
+#         username: admin
+#         password: admin
+#         cluster_name: my_cluster
+#         service: all
+#         state: installed
