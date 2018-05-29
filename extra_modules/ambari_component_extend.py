@@ -119,7 +119,9 @@ def main():
         password=dict(type='str', default=None, required=True, no_log=True),
         cluster_name=dict(type='str', default=None, required=True),
         component=dict(type='str', default=None, required=True),
-        add_host=dict(type='str', default=None, required=True)
+        add_host=dict(type='str', default=None, required=True),
+        retry=dict(type='int', default=60, required=False),
+        wait_interval = dict(type='int', default=10, required=False)
     )
 
     module = AnsibleModule(
