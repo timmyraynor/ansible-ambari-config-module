@@ -159,9 +159,6 @@ def main():
     wait_interval = p.get('wait_interval')
 
     ambari_url = '{0}://{1}:{2}'.format(protocol, host, port)
-    services_fact = get_all_services_states(
-        ambari_url, username, password, cluster_name)
-
     module.exit_json(changed=True)
 
 
