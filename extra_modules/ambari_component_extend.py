@@ -159,7 +159,46 @@ def main():
     wait_interval = p.get('wait_interval')
 
     ambari_url = '{0}://{1}:{2}'.format(protocol, host, port)
-    module.exit_json(changed=True)
+    
+    try:
+        make_sure_host_exist(ambari_url, username, password, cluster_name, hosttoadd)
+
+    except requests.ConnectionError as e:
+        module.fail_json(
+            msg="Could not connect to Ambari client: " + str(e.message), stacktrace=traceback.format_exc())
+    except AssertionError as e:
+        module.fail_json(msg=e.message, stacktrace=traceback.format_exc())
+    except Exception as e:
+        module.fail_json(
+            msg="Ambari client exception occurred: " + str(e.message), stacktrace=traceback.format_exc())
+
+
+def make_sure_host_exist(ambari_url, username, password, cluster_name, hosttoadd):
+    r = get(ambari_url, username, password, '/api/v1/clusters/{0}/hosts/{1}'.format(cluster_name, hosttoadd))
+    if r.status_code == '404':
+        # Host not found, try to add host
+        payload = {}
+        create_host_response = put(ambari_url, username, password, '/api/v1/clusters/{0}/hosts/{1}'.format(cluster_name, hosttoadd), json.dumps(payload))
+        assert create_host_response.status_code == '200' or create_host_response.status_code == '201' or create_host_response.status_code == '202'
+    elif r.status_code == '200':
+        pass
+    else:
+        raise AssertionError(msg='Status code for checking host registration not support: {0}'.format(r.status_code))
+
+
+
+def get(ambari_url, user, password, path, connection_timeout=10):
+    headers = {'X-Requested-By': 'ambari'}
+    r = requests.get(ambari_url + path, auth=(user, password),
+                     headers=headers, timeout=connection_timeout)
+    return r
+
+
+def put(ambari_url, user, password, path, data, connection_timeout=10):
+    headers = {'X-Requested-By': 'ambari'}
+    r = requests.put(ambari_url + path, data=data,
+                     auth=(user, password), headers=headers, timeout=connection_timeout)
+    return r
 
 
 if __name__ == '__main__':
