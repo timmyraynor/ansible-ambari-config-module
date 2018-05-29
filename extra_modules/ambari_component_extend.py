@@ -162,6 +162,16 @@ def main():
     
     try:
         make_sure_host_exist(ambari_url, username, password, cluster_name, hosttoadd)
+        # Add components to the host
+        add_response = post(ambari_url, username, password, '/api/v1/clusters/{0}/hosts/{1}/host_components/{2}'.format(cluster_name, hosttoadd, component), json.dumps({}) )
+        assert add_response.status_code == '200' or add_response.status_code == '201' or add_response.status_code == '202' 
+        # Install components to hosts
+        install_response = put(ambari_url, username, password, '/api/v1/clusters/{0}/hosts/{1}/host_components/{2}'.format(cluster_name, hosttoadd, component), json.dumps({
+            'HostRoles': {
+                'state' : 'INSTALLED'
+            }
+        }))
+        assert install_response.status_code == '200'
 
     except requests.ConnectionError as e:
         module.fail_json(
@@ -191,6 +201,12 @@ def get(ambari_url, user, password, path, connection_timeout=10):
     headers = {'X-Requested-By': 'ambari'}
     r = requests.get(ambari_url + path, auth=(user, password),
                      headers=headers, timeout=connection_timeout)
+    return r
+
+def post(ambari_url, user, password, path, data, connection_timeout=10):
+    headers = {'X-Requested-By': 'ambari'}
+    r = requests.put(ambari_url + path, data=data,
+                     auth=(user, password), headers=headers, timeout=connection_timeout)
     return r
 
 
